@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Sandboxed app (required for App Store, recommended otherwise on macOS). -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- Front-facing camera access for hand tracking. -->
+	<key>com.apple.security.device.camera</key>
+	<true/>
+
+	<!-- Audio output for the soundtrack and SFX. The audio category here is
+	     for INPUT recording — we don't need it, but harmless if added. We
+	     omit it since AVAudioEngine output does not require an entitlement. -->
+</dict>
+</plist>

@@ -1,6 +1,12 @@
 import SwiftUI
 import AVFoundation
 
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
+
 struct GameView: View {
     @ObservedObject var gameManager: GameManager
     @ObservedObject var tracker: CameraHandTracker
@@ -57,25 +63,43 @@ struct GameView: View {
                 .position(x: W / 2, y: H / 2)
 
                 // ── 6. Pixel particles ───────────────────────────────────
-                ForEach(gameManager.particles) { p in
-                    Rectangle()
-                        .fill(p.color)
-                        .frame(width: p.size, height: p.size)
-                        .rotationEffect(.degrees(Double(p.id.hashValue % 45)))
-                        .opacity(max(0, p.life))
-                        .shadow(color: p.color, radius: 3)
-                        .position(x: p.position.x * W, y: p.position.y * H)
+                // Single Canvas replaces per-particle SwiftUI views + shadows,
+                // which caused severe FPS drops at high particle counts.
+                Canvas { ctx, sz in
+                    for p in gameManager.particles {
+                        let alpha = max(0.0, p.life)
+                        guard alpha > 0 else { continue }
+                        let cx   = p.position.x * sz.width
+                        let cy   = p.position.y * sz.height
+                        let half = p.size * 0.5
+                        // Soft glow ring then crisp core pixel
+                        let glowHalf = half + p.size
+                        ctx.fill(
+                            Path(CGRect(x: cx - glowHalf, y: cy - glowHalf,
+                                        width: glowHalf * 2, height: glowHalf * 2)),
+                            with: .color(p.color.opacity(alpha * 0.22))
+                        )
+                        ctx.fill(
+                            Path(CGRect(x: cx - half, y: cy - half,
+                                        width: p.size, height: p.size)),
+                            with: .color(p.color.opacity(alpha))
+                        )
+                    }
                 }
+                .allowsHitTesting(false)
 
                 // ── 7. Notes ─────────────────────────────────────────────
-                // When a player is glitching, their notes flicker to make catching hard.
                 ForEach(gameManager.notes) { note in
                     let glitching = note.player == 1 ? gameManager.trapGlitchP1.active
                                                      : gameManager.trapGlitchP2.active
                     let phase     = note.player == 1 ? gameManager.trapGlitchP1.glitchPhase
                                                      : gameManager.trapGlitchP2.glitchPhase
+                    let ghosted   = note.player == 1 ? gameManager.ghostP1.active
+                                                     : gameManager.ghostP2.active
                     NoteView(note: note, size: geo.size)
-                        .opacity(glitching ? abs(sin(phase * .pi * 9)) * 0.35 + 0.10 : 1.0)
+                        .opacity(glitching ? abs(sin(phase * .pi * 9)) * 0.35 + 0.10
+                                           : ghosted   ? 0.07
+                                           : 1.0)
                 }
 
                 // ── 8. Score floats ──────────────────────────────────────
@@ -148,6 +172,7 @@ struct GameView: View {
 
 // MARK: - Camera Preview
 
+#if os(iOS)
 struct CameraPreview: UIViewRepresentable {
     let tracker: CameraHandTracker
 
@@ -177,13 +202,47 @@ struct CameraPreview: UIViewRepresentable {
         CATransaction.commit()
     }
 }
+#elseif os(macOS)
+struct CameraPreview: NSViewRepresentable {
+    let tracker: CameraHandTracker
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer = CALayer()
+        view.layer?.backgroundColor = NSColor.black.cgColor
+        view.layer?.masksToBounds = true
+        if let layer = tracker.previewLayer {
+            layer.videoGravity = .resizeAspectFill
+            view.layer?.addSublayer(layer)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let hostLayer = nsView.layer,
+              let layer = tracker.previewLayer else { return }
+        if layer.superlayer == nil || layer.superlayer !== hostLayer {
+            layer.removeFromSuperlayer()
+            layer.videoGravity = .resizeAspectFill
+            hostLayer.addSublayer(layer)
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.frame = nsView.bounds
+        CATransaction.commit()
+    }
+}
+#endif
 
 // MARK: - Cyberpunk Grid
 
 struct CyberpunkGrid: View {
+    @Environment(\.uiScale) private var scale
+
     var body: some View {
         Canvas { ctx, size in
-            let step: CGFloat = 44
+            let step: CGFloat = 44 * scale
             var path = Path()
             var x: CGFloat = 0
             while x <= size.width {
@@ -310,6 +369,7 @@ struct GridRipple {
 struct AnimatedGrid: View {
     let handPositions: [CGPoint]  // normalised 0-1 screen positions
     let ripples:       [GridRipple]
+    @Environment(\.uiScale) private var scale
 
     var body: some View {
         TimelineView(.animation) { tl in
@@ -322,7 +382,7 @@ struct AnimatedGrid: View {
     }
 
     private func draw(ctx: GraphicsContext, size: CGSize, date: Date) {
-        let step: CGFloat = 42
+        let step: CGFloat = 42 * scale
         let t    = date.timeIntervalSinceReferenceDate
         let cols = Int(size.width  / step) + 2
         let rows = Int(size.height / step) + 2
@@ -420,9 +480,10 @@ struct NoteView: View {
     let size: CGSize
     @State private var pulse:    Bool    = false
     @State private var scanLine: CGFloat = -1   // sweeps -1 → +1
+    @Environment(\.uiScale) private var scale
 
     var body: some View {
-        let baseR  = note.noteSize.baseRadius
+        let baseR  = note.noteSize.baseRadius * scale
         let frameW = baseR * 2.2
 
         ZStack {
@@ -436,6 +497,14 @@ struct NoteView: View {
             } else if note.noteKind == .trap {
                 trapNote(baseR: baseR, frameW: frameW)
                     .scaleEffect(pulse ? 1.12 : 0.90)
+                    .opacity(note.life)
+            } else if note.noteKind == .frenzy {
+                frenzyNote(baseR: baseR, frameW: frameW)
+                    .scaleEffect(pulse ? 1.12 : 0.90)
+                    .opacity(note.life)
+            } else if note.noteKind == .ghost {
+                ghostNote(baseR: baseR, frameW: frameW)
+                    .scaleEffect(pulse ? 1.10 : 0.88)
                     .opacity(note.life)
             } else {
                 liveNote(baseR: baseR, frameW: frameW)
@@ -575,6 +644,74 @@ struct NoteView: View {
                 .foregroundColor(tgc.opacity(0.9))
                 .offset(y: frameW * 0.60)
                 .tracking(1)
+        }
+    }
+
+    // MARK: - Frenzy note (★ gold power-up)
+
+    @ViewBuilder
+    private func frenzyNote(baseR: CGFloat, frameW: CGFloat) -> some View {
+        let gold  = Color(red: 1.0, green: 0.92, blue: 0.0)
+        let glow  = Color(red: 1.0, green: 1.0,  blue: 0.40)
+        let scanY = scanLine * frameW * 0.44
+        ZStack {
+            HexagonShape().fill(gold.opacity(0.14))
+                .frame(width: frameW * 2.6, height: frameW * 2.6).blur(radius: baseR * 0.9)
+            HexagonShape().stroke(gold.opacity(0.25), lineWidth: 1)
+                .frame(width: frameW + 14, height: frameW + 14)
+            HexagonShape().stroke(gold, lineWidth: 2.5)
+                .frame(width: frameW, height: frameW)
+                .shadow(color: glow.opacity(0.95), radius: 4)
+                .shadow(color: glow.opacity(0.60), radius: 12)
+                .shadow(color: glow.opacity(0.30), radius: 26)
+            HexagonShape().fill(gold.opacity(0.10))
+                .frame(width: frameW - 4, height: frameW - 4)
+            HexagonShape().stroke(gold.opacity(0.40), lineWidth: 1)
+                .frame(width: frameW * 0.58, height: frameW * 0.58).rotationEffect(.degrees(30))
+            LinearGradient(colors: [.clear, gold.opacity(0.60), .clear],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(width: frameW * 0.80, height: 1.5).offset(y: scanY)
+                .frame(width: frameW, height: frameW).clipped()
+            Text("★")
+                .font(.custom("Audiowide-Regular", size: baseR * 0.88))
+                .foregroundColor(gold).shadow(color: glow, radius: 8)
+            Text("FRENZY")
+                .font(.custom("Audiowide-Regular", size: max(8, baseR * 0.28)))
+                .foregroundColor(gold.opacity(0.9)).offset(y: frameW * 0.60).tracking(1)
+        }
+    }
+
+    // MARK: - Ghost note (👻 purple weapon)
+
+    @ViewBuilder
+    private func ghostNote(baseR: CGFloat, frameW: CGFloat) -> some View {
+        let purple = Color(red: 0.70, green: 0.40, blue: 1.0)
+        let glow   = Color(red: 0.85, green: 0.60, blue: 1.0)
+        let scanY  = scanLine * frameW * 0.44
+        ZStack {
+            HexagonShape().fill(purple.opacity(0.14))
+                .frame(width: frameW * 2.6, height: frameW * 2.6).blur(radius: baseR * 0.9)
+            HexagonShape().stroke(purple.opacity(0.22), lineWidth: 1)
+                .frame(width: frameW + 14, height: frameW + 14)
+            HexagonShape().stroke(purple, lineWidth: 2.5)
+                .frame(width: frameW, height: frameW)
+                .shadow(color: glow.opacity(0.95), radius: 4)
+                .shadow(color: glow.opacity(0.60), radius: 12)
+                .shadow(color: glow.opacity(0.30), radius: 26)
+            HexagonShape().fill(purple.opacity(0.10))
+                .frame(width: frameW - 4, height: frameW - 4)
+            HexagonShape().stroke(glow.opacity(0.35), lineWidth: 1)
+                .frame(width: frameW * 0.58, height: frameW * 0.58).rotationEffect(.degrees(30))
+            LinearGradient(colors: [.clear, purple.opacity(0.55), .clear],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(width: frameW * 0.80, height: 1.5).offset(y: scanY)
+                .frame(width: frameW, height: frameW).clipped()
+            Text("👻")
+                .font(.system(size: baseR * 0.80))
+                .shadow(color: glow, radius: 8)
+            Text("GHOST")
+                .font(.custom("Audiowide-Regular", size: max(8, baseR * 0.28)))
+                .foregroundColor(glow.opacity(0.9)).offset(y: frameW * 0.60).tracking(1)
         }
     }
 
@@ -856,23 +993,24 @@ struct HandCursor: View {
     let color: Color
     let size: CGSize
     var frozen: Bool = false
+    @Environment(\.uiScale) private var scale
 
     var body: some View {
         if hand.isActive {
-            let r: CGFloat = hand.isPinching ? 46 : 62
+            let r: CGFloat = (hand.isPinching ? 46 : 62) * scale
             let displayColor: Color = frozen ? Color(red: 0.4, green: 0.85, blue: 1.0) : color
 
             ZStack {
                 Group {
-                    Rectangle().frame(width: 48, height: 1)
-                    Rectangle().frame(width: 1, height: 48)
+                    Rectangle().frame(width: 48 * scale, height: 1)
+                    Rectangle().frame(width: 1, height: 48 * scale)
                 }
                 .foregroundColor(displayColor.opacity(0.55))
 
                 Circle()
                     .stroke(displayColor, lineWidth: 2.5)
                     .frame(width: r, height: r)
-                    .shadow(color: displayColor, radius: hand.isPinching ? 16 : 8)
+                    .shadow(color: displayColor, radius: (hand.isPinching ? 16 : 8) * scale)
 
                 if hand.isPinching {
                     Circle()
@@ -886,7 +1024,7 @@ struct HandCursor: View {
             }
             .position(x: hand.position.x * size.width, y: hand.position.y * size.height)
             .animation(.spring(response: 0.08, dampingFraction: 0.7), value: hand.isPinching)
-            .animation(.interactiveSpring(response: 0.05), value: hand.position)
+            .animation(.interactiveSpring(response: 0.06, dampingFraction: 0.90), value: hand.position)
             .allowsHitTesting(false)
         }
     }
@@ -896,73 +1034,78 @@ struct HandCursor: View {
 
 struct HUDBar: View {
     @ObservedObject var gameManager: GameManager
+    @Environment(\.uiScale) private var scale
 
     var body: some View {
         HStack {
-            // P1 score + obstacle charge + freeze indicator
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("\(gameManager.scoreP1)")
-                        .font(.custom("Audiowide-Regular", size: 38))
+                        .font(.custom("Audiowide-Regular", size: 38 * scale))
                         .foregroundColor(gameManager.freezeP1.active ? Color(red: 0.4, green: 0.85, blue: 1.0) : .cyan)
                         .shadow(color: gameManager.freezeP1.active ? Color(red: 0.4, green: 0.85, blue: 1.0) : .cyan, radius: 12)
                     if gameManager.freezeP1.active {
                         Text("❄ \(Int(ceil(gameManager.freezeP1.timeLeft)))s")
-                            .font(.custom("Audiowide-Regular", size: 13))
+                            .font(.custom("Audiowide-Regular", size: 13 * scale))
                             .foregroundColor(Color(red: 0.4, green: 0.85, blue: 1.0))
                             .shadow(color: Color(red: 0.4, green: 0.85, blue: 1.0), radius: 8)
                     }
+                    if gameManager.frenzyP1.active {
+                        Text("★ \(Int(ceil(gameManager.frenzyP1.timeLeft)))s")
+                            .font(.custom("Audiowide-Regular", size: 13 * scale))
+                            .foregroundColor(.yellow)
+                            .shadow(color: .yellow, radius: 8)
+                    }
                 }
-                HStack(spacing: 4) {
-                    Text("PLAYER 1")
-                        .font(.custom("Audiowide-Regular", size: 10))
-                        .foregroundColor(.cyan.opacity(0.7))
-                        .tracking(4)
-                    ObstacleChargeBar(charge: gameManager.obstacleChargeP1Display, color: .cyan)
-                }
+                Text("PLAYER 1")
+                    .font(.custom("Audiowide-Regular", size: 10 * scale))
+                    .foregroundColor(.cyan.opacity(0.7))
+                    .tracking(4)
             }
-            .padding(.leading, 24)
+            .padding(.leading, 24 * scale)
 
             Spacer()
 
             VStack(spacing: 2) {
                 Text("\(gameManager.timeLeft)")
-                    .font(.custom("Audiowide-Regular", size: 40))
+                    .font(.custom("Audiowide-Regular", size: 40 * scale))
                     .foregroundColor(gameManager.timeLeft <= 10 ? .red : .white)
                     .shadow(color: gameManager.timeLeft <= 10 ? .red : .white.opacity(0.4), radius: 14)
                 Text("TIME")
-                    .font(.custom("Audiowide-Regular", size: 10))
+                    .font(.custom("Audiowide-Regular", size: 10 * scale))
                     .foregroundColor(.gray)
                     .tracking(4)
             }
 
             Spacer()
 
-            // P2 score + obstacle charge + freeze indicator
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     if gameManager.freezeP2.active {
                         Text("❄ \(Int(ceil(gameManager.freezeP2.timeLeft)))s")
-                            .font(.custom("Audiowide-Regular", size: 13))
+                            .font(.custom("Audiowide-Regular", size: 13 * scale))
                             .foregroundColor(Color(red: 0.4, green: 0.85, blue: 1.0))
                             .shadow(color: Color(red: 0.4, green: 0.85, blue: 1.0), radius: 8)
                     }
+                    if gameManager.frenzyP2.active {
+                        Text("★ \(Int(ceil(gameManager.frenzyP2.timeLeft)))s")
+                            .font(.custom("Audiowide-Regular", size: 13 * scale))
+                            .foregroundColor(.yellow)
+                            .shadow(color: .yellow, radius: 8)
+                    }
                     Text("\(gameManager.scoreP2)")
-                        .font(.custom("Audiowide-Regular", size: 38))
+                        .font(.custom("Audiowide-Regular", size: 38 * scale))
                         .foregroundColor(gameManager.freezeP2.active ? Color(red: 0.4, green: 0.85, blue: 1.0) : .magenta)
                         .shadow(color: gameManager.freezeP2.active ? Color(red: 0.4, green: 0.85, blue: 1.0) : .magenta, radius: 12)
                 }
-                HStack(spacing: 4) {
-                    ObstacleChargeBar(charge: gameManager.obstacleChargeP2Display, color: .magenta)
-                    Text("PLAYER 2")
-                        .font(.custom("Audiowide-Regular", size: 10))
-                        .foregroundColor(.magenta.opacity(0.7))
-                        .tracking(4)
-                }
+                Text("PLAYER 2")
+                    .font(.custom("Audiowide-Regular", size: 10 * scale))
+                    .foregroundColor(.magenta.opacity(0.7))
+                    .tracking(4)
             }
-            .padding(.trailing, 24)
+            .padding(.trailing, 24 * scale)
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, 14 * scale)
         .background(.ultraThinMaterial.opacity(0.85))
     }
 }
@@ -972,19 +1115,20 @@ struct HUDBar: View {
 struct BeatIndicator: View {
     let quality: BeatQuality
     @State private var show = false
+    @Environment(\.uiScale) private var scale
 
     var body: some View {
         Group {
             switch quality {
             case .perfect:
                 Text("★ PERFECT BEAT ★")
-                    .font(.custom("Audiowide-Regular", size: 14))
+                    .font(.custom("Audiowide-Regular", size: 14 * scale))
                     .foregroundColor(.yellow)
                     .shadow(color: .yellow, radius: 16)
                     .tracking(3)
             case .good:
                 Text("♪ ON BEAT")
-                    .font(.custom("Audiowide-Regular", size: 12))
+                    .font(.custom("Audiowide-Regular", size: 12 * scale))
                     .foregroundColor(.white.opacity(0.75))
                     .tracking(3)
             case .offBeat:
@@ -997,24 +1141,6 @@ struct BeatIndicator: View {
     }
 }
 
-// MARK: - Obstacle Charge Bar  (❄ pip indicators under score)
-
-struct ObstacleChargeBar: View {
-    let charge: Int
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<min(charge, 3), id: \.self) { _ in
-                Text("❄")
-                    .font(.custom("Audiowide-Regular", size: 11))
-                    .foregroundColor(Color(red: 0.4, green: 0.85, blue: 1.0))
-                    .shadow(color: Color(red: 0.4, green: 0.85, blue: 1.0), radius: 6)
-            }
-        }
-    }
-}
-
 // MARK: - Freeze Overlay
 
 enum PlayerSide { case left, right }
@@ -1023,6 +1149,7 @@ struct FreezeOverlay: View {
     let freeze: FreezeState
     let side: PlayerSide
     let size: CGSize
+    @Environment(\.uiScale) private var scale
 
     var body: some View {
         let iceBlue = Color(red: 0.4, green: 0.85, blue: 1.0)
@@ -1069,13 +1196,13 @@ struct FreezeOverlay: View {
             // "FROZEN" text + countdown
             VStack(spacing: 4) {
                 Text("❄ FROZEN ❄")
-                    .font(.custom("Audiowide-Regular", size: 22))
+                    .font(.custom("Audiowide-Regular", size: 22 * scale))
                     .foregroundColor(iceBlue)
                     .shadow(color: iceBlue, radius: 16)
                     .tracking(3)
                     .scaleEffect(1.0 + 0.04 * sin(freeze.glitchPhase * .pi * 6))
                 Text("\(Int(ceil(freeze.timeLeft)))s")
-                    .font(.custom("Audiowide-Regular", size: 36))
+                    .font(.custom("Audiowide-Regular", size: 36 * scale))
                     .foregroundColor(.white)
                     .shadow(color: iceBlue, radius: 12)
             }
@@ -1092,6 +1219,7 @@ struct TrapGlitchOverlay: View {
     let side: PlayerSide
     let player: Int
     let size: CGSize
+    @Environment(\.uiScale) private var scale
 
     var body: some View {
         let c = player == 1
@@ -1144,13 +1272,13 @@ struct TrapGlitchOverlay: View {
             // Status text
             VStack(spacing: 4) {
                 Text("⚡ GLITCHING ⚡")
-                    .font(.custom("Audiowide-Regular", size: 19))
+                    .font(.custom("Audiowide-Regular", size: 19 * scale))
                     .foregroundColor(c)
                     .shadow(color: c, radius: 14)
                     .tracking(2)
                     .scaleEffect(1.0 + 0.05 * sin(glitch.glitchPhase * .pi * 9))
                 Text("\(Int(ceil(glitch.timeLeft)))s")
-                    .font(.custom("Audiowide-Regular", size: 36))
+                    .font(.custom("Audiowide-Regular", size: 36 * scale))
                     .foregroundColor(.white)
                     .shadow(color: c, radius: 10)
             }
@@ -1161,16 +1289,18 @@ struct TrapGlitchOverlay: View {
 }
 
 struct ZoneLabels: View {
+    @Environment(\.uiScale) private var scale
+
     var body: some View {
         HStack {
             Text("// P1 ZONE")
-                .font(.custom("Audiowide-Regular", size: 11))
+                .font(.custom("Audiowide-Regular", size: 11 * scale))
                 .foregroundColor(.cyan.opacity(0.4))
                 .tracking(2)
                 .padding(.leading, 16)
             Spacer()
             Text("P2 ZONE //")
-                .font(.custom("Audiowide-Regular", size: 11))
+                .font(.custom("Audiowide-Regular", size: 11 * scale))
                 .foregroundColor(.magenta.opacity(0.4))
                 .tracking(2)
                 .padding(.trailing, 16)

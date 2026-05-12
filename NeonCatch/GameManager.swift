@@ -12,8 +12,10 @@ enum NoteShape { case hexagon, square }
 
 enum NoteKind {
     case normal
-    case obstacle   // ❄️ freeze weapon — catch it to freeze the opponent for 3 s
-    case trap       // ⚡ glitch trap  — catch it to glitch your own screen for 3 s
+    case obstacle   // ❄  freeze weapon — catch it to freeze the opponent for 3 s
+    case trap       // ⚡ glitch trap   — catch it to glitch your own screen for 3 s
+    case frenzy     // ★  gold boost    — catch it for 2× points for 5 s
+    case ghost      // 👻 ghost weapon  — catch it to make the opponent's notes invisible for 3 s
 }
 
 // MARK: - Note size / scoring tiers
@@ -110,6 +112,8 @@ struct NoteItem: Identifiable {
         case .obstacle: return .white
         case .trap:     return player == 1 ? Color(red: 1.0, green: 0.40, blue: 0.0)
                                            : Color(red: 0.40, green: 1.0, blue: 0.0)
+        case .frenzy:   return Color(red: 1.0, green: 0.85, blue: 0.0)
+        case .ghost:    return Color(red: 0.70, green: 0.40, blue: 1.0)
         case .normal:   return player == 1 ? .cyan : .magenta
         }
     }
@@ -118,6 +122,8 @@ struct NoteItem: Identifiable {
         case .obstacle: return Color(red: 0.4, green: 0.85, blue: 1.0)
         case .trap:     return player == 1 ? Color(red: 1.0, green: 0.55, blue: 0.0)
                                            : Color(red: 0.50, green: 1.0, blue: 0.0)
+        case .frenzy:   return Color(red: 1.0, green: 1.0, blue: 0.35)
+        case .ghost:    return Color(red: 0.85, green: 0.60, blue: 1.0)
         case .normal:   return player == 1 ? Color(red: 0, green: 1, blue: 1)
                                            : Color(red: 1, green: 0, blue: 1)
         }
@@ -126,9 +132,10 @@ struct NoteItem: Identifiable {
 }
 
 struct HandState: Equatable {
-    var position: CGPoint = .zero
-    var isPinching: Bool = false
-    var isActive: Bool = false
+    var position:  CGPoint = .zero
+    var isPinching: Bool   = false
+    var isActive:   Bool   = false
+    var pinchDist: CGFloat = 1.0   // raw Vision thumb-index distance; 1.0 = fully open
 }
 
 struct CatchEvent: Equatable {
@@ -177,6 +184,23 @@ struct TrapGlitchState {
     static let duration: Double = 3.0
 }
 
+// MARK: - Frenzy state  (2× points for the catching player)
+
+struct FrenzyState {
+    var active: Bool = false
+    var timeLeft: Double = 0
+    static let duration: Double = 5.0
+}
+
+// MARK: - Ghost state  (opponent's notes become near-invisible)
+
+struct GhostState {
+    var active: Bool = false
+    var timeLeft: Double = 0
+    var phase: Double = 0   // used for subtle shimmer on the ghost overlay
+    static let duration: Double = 3.0
+}
+
 // MARK: - Game Manager
 
 @MainActor
@@ -199,22 +223,13 @@ class GameManager: ObservableObject {
     @Published var trapGlitchP1: TrapGlitchState = TrapGlitchState()
     @Published var trapGlitchP2: TrapGlitchState = TrapGlitchState()
 
-    // How many obstacle notes each player has queued to spawn
-    private var obstacleChargeP1: Int = 0
-    private var obstacleChargeP2: Int = 0
-    // Track last score milestone to detect threshold crossings
-    private var lastObstacleMilestoneP1: Int = 0
-    private var lastObstacleMilestoneP2: Int = 0
-    /// Points needed to earn one obstacle note
-    private let obstacleThreshold = 8000
+    // Frenzy — catching player scores 2× for 5 s
+    @Published var frenzyP1: FrenzyState = FrenzyState()
+    @Published var frenzyP2: FrenzyState = FrenzyState()
 
-    // Countdown (in noteSpawner ticks) until the next trap note spawns per side
-    private var trapCountdownP1: Int = 12
-    private var trapCountdownP2: Int = 17
-
-    // Public read-only charge display for the HUD
-    var obstacleChargeP1Display: Int { obstacleChargeP1 }
-    var obstacleChargeP2Display: Int { obstacleChargeP2 }
+    // Ghost — catching player makes the OPPONENT's notes near-invisible for 3 s
+    @Published var ghostP1: GhostState = GhostState()   // P1's notes are ghosted
+    @Published var ghostP2: GhostState = GhostState()   // P2's notes are ghosted
 
     var handsP1: [HandState] = []
     var handsP2: [HandState] = []
@@ -234,6 +249,8 @@ class GameManager: ObservableObject {
         gameTimer?.cancel(); noteSpawner?.cancel(); displayLink?.cancel()
         notes = []; particles = []; scoreFloats = []; lastCatch = nil
         trapGlitchP1 = TrapGlitchState(); trapGlitchP2 = TrapGlitchState()
+        frenzyP1 = FrenzyState(); frenzyP2 = FrenzyState()
+        ghostP1  = GhostState();  ghostP2  = GhostState()
         state = .calibrating
     }
 
@@ -244,10 +261,8 @@ class GameManager: ObservableObject {
         handsP1 = []; handsP2 = []
         freezeP1 = FreezeState(); freezeP2 = FreezeState()
         trapGlitchP1 = TrapGlitchState(); trapGlitchP2 = TrapGlitchState()
-        obstacleChargeP1 = 0; obstacleChargeP2 = 0
-        lastObstacleMilestoneP1 = 0; lastObstacleMilestoneP2 = 0
-        trapCountdownP1 = Int.random(in: 11...19)
-        trapCountdownP2 = Int.random(in: 14...22)
+        frenzyP1 = FrenzyState(); frenzyP2 = FrenzyState()
+        ghostP1  = GhostState();  ghostP2  = GhostState()
         audioEngine.reset()
         audioEngine.startMusic()
         state = .playing
@@ -286,34 +301,38 @@ class GameManager: ObservableObject {
         notes = []; particles = []; scoreFloats = []
         freezeP1 = FreezeState(); freezeP2 = FreezeState()
         trapGlitchP1 = TrapGlitchState(); trapGlitchP2 = TrapGlitchState()
+        frenzyP1 = FrenzyState(); frenzyP2 = FrenzyState()
+        ghostP1  = GhostState();  ghostP2  = GhostState()
         state = .start
     }
 
     // MARK: - Note spawner tick
 
     private func tickNoteSpawner() {
-        // Obstacle note: max one on screen per player at a time
-        if obstacleChargeP1 > 0 {
-            let alreadyHas = notes.contains { $0.player == 1 && $0.noteKind == .obstacle && !$0.caught }
-            if !alreadyHas { spawnObstacleNote(player: 1); obstacleChargeP1 -= 1 }
-        }
-        if obstacleChargeP2 > 0 {
-            let alreadyHas = notes.contains { $0.player == 2 && $0.noteKind == .obstacle && !$0.caught }
-            if !alreadyHas { spawnObstacleNote(player: 2); obstacleChargeP2 -= 1 }
-        }
-
-        // Trap note: random countdown, max one per side at a time
-        trapCountdownP1 -= 1
-        if trapCountdownP1 <= 0 {
-            let alreadyHas = notes.contains { $0.player == 1 && $0.noteKind == .trap && !$0.caught }
-            if !alreadyHas { spawnTrapNote(player: 1) }
-            trapCountdownP1 = Int.random(in: 11...22)
-        }
-        trapCountdownP2 -= 1
-        if trapCountdownP2 <= 0 {
-            let alreadyHas = notes.contains { $0.player == 2 && $0.noteKind == .trap && !$0.caught }
-            if !alreadyHas { spawnTrapNote(player: 2) }
-            trapCountdownP2 = Int.random(in: 11...22)
+        // Freeze and glitch notes spawn with independent per-player random rolls.
+        // Score, time, or any player state have zero influence — both players
+        // face the exact same probability each tick.
+        //   Freeze:  ~2.5 % per tick × 0.9 s ≈ one every ~36 s on average
+        //   Glitch:  ~2.0 % per tick × 0.9 s ≈ one every ~45 s on average
+        //   Frenzy:  ~2.5 % per tick × 0.9 s ≈ one every ~36 s on average
+        //   Ghost:   ~2.0 % per tick × 0.9 s ≈ one every ~45 s on average
+        for player in [1, 2] {
+            if Double.random(in: 0..<1) < 0.025 {
+                let alreadyHas = notes.contains { $0.player == player && $0.noteKind == .obstacle && !$0.caught }
+                if !alreadyHas { spawnObstacleNote(player: player) }
+            }
+            if Double.random(in: 0..<1) < 0.020 {
+                let alreadyHas = notes.contains { $0.player == player && $0.noteKind == .trap && !$0.caught }
+                if !alreadyHas { spawnTrapNote(player: player) }
+            }
+            if Double.random(in: 0..<1) < 0.025 {
+                let alreadyHas = notes.contains { $0.player == player && $0.noteKind == .frenzy && !$0.caught }
+                if !alreadyHas { spawnFrenzyNote(player: player) }
+            }
+            if Double.random(in: 0..<1) < 0.020 {
+                let alreadyHas = notes.contains { $0.player == player && $0.noteKind == .ghost && !$0.caught }
+                if !alreadyHas { spawnGhostNote(player: player) }
+            }
         }
 
         let alive1 = notes.filter { $0.player == 1 && !$0.caught }.count
@@ -397,6 +416,22 @@ class GameManager: ObservableObject {
             if trapGlitchP2.timeLeft <= 0 { trapGlitchP2 = TrapGlitchState() }
         }
 
+        // Tick frenzy timers
+        if frenzyP1.active { frenzyP1.timeLeft -= dt; if frenzyP1.timeLeft <= 0 { frenzyP1 = FrenzyState() } }
+        if frenzyP2.active { frenzyP2.timeLeft -= dt; if frenzyP2.timeLeft <= 0 { frenzyP2 = FrenzyState() } }
+
+        // Tick ghost timers
+        if ghostP1.active {
+            ghostP1.timeLeft -= dt
+            ghostP1.phase = (ghostP1.phase + dt * 7).truncatingRemainder(dividingBy: 1)
+            if ghostP1.timeLeft <= 0 { ghostP1 = GhostState() }
+        }
+        if ghostP2.active {
+            ghostP2.timeLeft -= dt
+            ghostP2.phase = (ghostP2.phase + dt * 7).truncatingRemainder(dividingBy: 1)
+            if ghostP2.timeLeft <= 0 { ghostP2 = GhostState() }
+        }
+
         var toRemove: [UUID] = []
         for i in notes.indices {
             if notes[i].caught {
@@ -453,6 +488,8 @@ class GameManager: ObservableObject {
                     switch notes[i].noteKind {
                     case .obstacle: handleObstacleCatch(byPlayer: player, at: notes[i].position)
                     case .trap:     handleTrapCatch(byPlayer: player, at: notes[i].position)
+                    case .frenzy:   handleFreznyCatch(byPlayer: player, at: notes[i].position)
+                    case .ghost:    handleGhostCatch(byPlayer: player, at: notes[i].position)
                     case .normal:   handleNormalCatch(noteIndex: i, player: player)
                     }
                     break
@@ -462,27 +499,11 @@ class GameManager: ObservableObject {
     }
 
     private func handleNormalCatch(noteIndex i: Int, player: Int) {
-        let quality     = audioEngine.beatQuality()
-        let basePoints  = notes[i].points
-        let bonusPoints = Int(Double(basePoints) * quality.bonusMultiplier)
+        let quality        = audioEngine.beatQuality()
+        let frenzyMult     = (player == 1 ? frenzyP1.active : frenzyP2.active) ? 2.0 : 1.0
+        let bonusPoints    = Int(Double(notes[i].points) * quality.bonusMultiplier * frenzyMult)
 
-        if player == 1 {
-            scoreP1 += bonusPoints
-            let newMilestone = scoreP1 / obstacleThreshold
-            let oldMilestone = lastObstacleMilestoneP1
-            if newMilestone > oldMilestone {
-                obstacleChargeP1 += (newMilestone - oldMilestone)
-                lastObstacleMilestoneP1 = newMilestone
-            }
-        } else {
-            scoreP2 += bonusPoints
-            let newMilestone = scoreP2 / obstacleThreshold
-            let oldMilestone = lastObstacleMilestoneP2
-            if newMilestone > oldMilestone {
-                obstacleChargeP2 += (newMilestone - oldMilestone)
-                lastObstacleMilestoneP2 = newMilestone
-            }
-        }
+        if player == 1 { scoreP1 += bonusPoints } else { scoreP2 += bonusPoints }
 
         spawnPixelBurst(at: notes[i].position, color: notes[i].glowColor, quality: quality)
         spawnScoreFloat(at: notes[i].position, points: bonusPoints,
@@ -548,6 +569,63 @@ class GameManager: ObservableObject {
 
         lastCatch = CatchEvent(position: pos, color: glitchColor)
         audioEngine.playGlitch()
+    }
+
+    private func handleFreznyCatch(byPlayer player: Int, at pos: CGPoint) {
+        if player == 1 {
+            frenzyP1 = FrenzyState(active: true, timeLeft: FrenzyState.duration)
+        } else {
+            frenzyP2 = FrenzyState(active: true, timeLeft: FrenzyState.duration)
+        }
+        let gold = Color(red: 1.0, green: 0.92, blue: 0.0)
+        spawnGlitchBurst(at: pos, color: gold)
+        let cx: CGFloat = player == 1 ? 0.25 : 0.75
+        scoreFloats.append(ScoreFloat(
+            position: CGPoint(x: cx, y: 0.55),
+            target:   CGPoint(x: cx, y: 0.30),
+            points:   0, color: gold, life: 1.6, scale: 0.5,
+            beatLabel: "★ FRENZY!", beatLabelColor: gold
+        ))
+        lastCatch = CatchEvent(position: pos, color: gold)
+        audioEngine.playFrenzy()
+    }
+
+    private func handleGhostCatch(byPlayer player: Int, at pos: CGPoint) {
+        // Ghost makes the OPPONENT's notes near-invisible
+        let purple = Color(red: 0.75, green: 0.45, blue: 1.0)
+        if player == 1 {
+            ghostP2 = GhostState(active: true, timeLeft: GhostState.duration, phase: 0)
+        } else {
+            ghostP1 = GhostState(active: true, timeLeft: GhostState.duration, phase: 0)
+        }
+        spawnGlitchBurst(at: pos, color: purple)
+        let oppCx: CGFloat = player == 1 ? 0.75 : 0.25
+        scoreFloats.append(ScoreFloat(
+            position: CGPoint(x: oppCx, y: 0.55),
+            target:   CGPoint(x: oppCx, y: 0.30),
+            points:   0, color: purple, life: 1.6, scale: 0.5,
+            beatLabel: "👻 GHOSTED!", beatLabelColor: purple
+        ))
+        lastCatch = CatchEvent(position: pos, color: purple)
+        audioEngine.playGhost()
+    }
+
+    private func spawnFrenzyNote(player: Int) {
+        let pos = bestSpawnPosition(player: player)
+        notes.append(NoteItem(
+            player: player, position: pos, symbol: "★",
+            noteSize: .medium, noteShape: .hexagon, noteKind: .frenzy,
+            decayRate: 1.0 / (10.0 * 60.0)
+        ))
+    }
+
+    private func spawnGhostNote(player: Int) {
+        let pos = bestSpawnPosition(player: player)
+        notes.append(NoteItem(
+            player: player, position: pos, symbol: "👻",
+            noteSize: .medium, noteShape: .hexagon, noteKind: .ghost,
+            decayRate: 1.0 / (10.0 * 60.0)
+        ))
     }
 
     private func spawnTrapNote(player: Int) {
@@ -634,6 +712,8 @@ private class AudioEngine {
     private let catchPlayer   = AVAudioPlayerNode()
     private let freezePlayer  = AVAudioPlayerNode()
     private let glitchPlayer  = AVAudioPlayerNode()
+    private let frenzyPlayer  = AVAudioPlayerNode()
+    private let ghostPlayer   = AVAudioPlayerNode()
     private let format:        AVAudioFormat
 
     private let bpm: Double = 123.046875
@@ -650,18 +730,26 @@ private class AudioEngine {
         }
         format = fmt
 
+        // AVAudioSession is iOS-only. On macOS audio routing is handled by
+        // the system and AVAudioEngine works without explicit session setup.
+        #if os(iOS)
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
         try? session.setActive(true)
+        #endif
 
         engine.attach(musicPlayer)
         engine.attach(catchPlayer)
         engine.attach(freezePlayer)
         engine.attach(glitchPlayer)
+        engine.attach(frenzyPlayer)
+        engine.attach(ghostPlayer)
         engine.connect(musicPlayer,  to: engine.mainMixerNode, format: nil)
         engine.connect(catchPlayer,  to: engine.mainMixerNode, format: nil)
         engine.connect(freezePlayer, to: engine.mainMixerNode, format: nil)
         engine.connect(glitchPlayer, to: engine.mainMixerNode, format: nil)
+        engine.connect(frenzyPlayer, to: engine.mainMixerNode, format: nil)
+        engine.connect(ghostPlayer,  to: engine.mainMixerNode, format: nil)
         try? engine.start()
 
         if let url = Bundle.main.url(forResource: "Midnight_Service", withExtension: "mp3"),
@@ -673,6 +761,9 @@ private class AudioEngine {
             }
         }
 
+        // AVAudioSession interruptions are iOS-only. On macOS the engine
+        // does not get interrupted by phone calls / Siri, so no observer needed.
+        #if os(iOS)
         interruptionObserver = NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification,
             object: AVAudioSession.sharedInstance(), queue: .main
@@ -686,12 +777,14 @@ private class AudioEngine {
             try? self.engine.start()
             if self.musicIsPlaying { self.startMusic() }
         }
+        #endif
     }
 
     deinit { if let obs = interruptionObserver { NotificationCenter.default.removeObserver(obs) } }
 
     func reset() {
-        musicPlayer.stop(); catchPlayer.stop(); freezePlayer.stop(); glitchPlayer.stop()
+        musicPlayer.stop(); catchPlayer.stop(); freezePlayer.stop()
+        glitchPlayer.stop(); frenzyPlayer.stop(); ghostPlayer.stop()
         musicIsPlaying = false; musicStartHostTime = 0
     }
 
@@ -792,6 +885,55 @@ private class AudioEngine {
         if !glitchPlayer.isPlaying { glitchPlayer.play() }
     }
 
+    func playFrenzy() {
+        ensureEngineRunning()
+        let sr: Double = 44100; let dur: Double = 0.55
+        let fc = AVAudioFrameCount(sr * dur)
+        guard let mono = AVAudioFormat(standardFormatWithSampleRate: sr, channels: 1),
+              let buf  = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: fc),
+              let data = buf.floatChannelData?[0] else { return }
+        buf.frameLength = fc
+        // Ascending major arpeggio C5→E5→G5→C6 — triumphant power-up feel
+        let freqs:   [Float]  = [523.25, 659.25, 783.99, 1046.5]
+        let delays:  [Double] = [0.0,    0.10,   0.20,   0.32]
+        for i in 0..<Int(fc) {
+            let t = Double(i) / sr
+            var s: Float = 0
+            for (f, d) in zip(freqs, delays) {
+                let lt = t - d; guard lt >= 0 else { continue }
+                let env = Float(max(0, 1.0 - lt / 0.22)); let e2 = env * env
+                s += sin(2 * .pi * f * Float(lt)) * e2 * 0.28
+            }
+            data[i] = s
+        }
+        reconnectMono(node: frenzyPlayer, fmt: mono)
+        frenzyPlayer.scheduleBuffer(buf)
+        if !frenzyPlayer.isPlaying { frenzyPlayer.play() }
+    }
+
+    func playGhost() {
+        ensureEngineRunning()
+        let sr: Double = 44100; let dur: Double = 0.50
+        let fc = AVAudioFrameCount(sr * dur)
+        guard let mono = AVAudioFormat(standardFormatWithSampleRate: sr, channels: 1),
+              let buf  = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: fc),
+              let data = buf.floatChannelData?[0] else { return }
+        buf.frameLength = fc
+        // Eerie descending tone with vibrato — otherworldly ghost feel
+        let baseFreq: Float = 440.0
+        for i in 0..<Int(fc) {
+            let t      = Float(i) / Float(sr)
+            let prog   = t / Float(dur)                              // 0→1 over duration
+            let freq   = baseFreq * (1.0 - prog * 0.45)             // descend to ~242 Hz
+            let vib    = 1.0 + 0.018 * sin(2 * .pi * 6.0 * t)      // 6 Hz vibrato
+            let env    = Float(max(0, 1.0 - Double(prog) * 1.1))
+            data[i]    = sin(2 * .pi * freq * vib * t) * env * 0.30
+        }
+        reconnectMono(node: ghostPlayer, fmt: mono)
+        ghostPlayer.scheduleBuffer(buf)
+        if !ghostPlayer.isPlaying { ghostPlayer.play() }
+    }
+
     private func reconnectMono(node: AVAudioPlayerNode, fmt: AVAudioFormat) {
         if node.outputFormat(forBus: 0).channelCount != fmt.channelCount {
             engine.disconnectNodeOutput(node)
@@ -805,7 +947,9 @@ private class AudioEngine {
 
     private func ensureEngineRunning() {
         guard !engine.isRunning else { return }
+        #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(true)
+        #endif
         try? engine.start()
     }
 }

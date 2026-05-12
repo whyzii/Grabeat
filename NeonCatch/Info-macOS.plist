@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleName</key>
+	<string>NeonCatch</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.neoncatch.game</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>NeonCatch uses the camera to track your hands so you can catch notes in the game.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Not used.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+	<!-- On macOS, bundled fonts are registered via ATSApplicationFontsPath
+	     (a path to a folder containing .ttf files relative to the bundle's
+	     Resources). UIAppFonts is iOS-only and is ignored here. The font
+	     file Audiowide-Regular.ttf sits at the root of Resources, so "." works. -->
+	<key>ATSApplicationFontsPath</key>
+	<string>.</string>
+	<!-- Kept for symmetry; harmless on macOS (ignored). -->
+	<key>UIAppFonts</key>
+	<array>
+		<string>Audiowide-Regular.ttf</string>
+	</array>
+</dict>
+</plist>

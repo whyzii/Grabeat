@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		916F351C2FB1ED08000A6C23 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 916F351B2FB1ED08000A6C23 /* Assets.xcassets */; };
 		AA01 /* NeonCatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA01 /* NeonCatchApp.swift */; };
 		AA02 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA02 /* ContentView.swift */; };
 		AA03 /* GameManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA03 /* GameManager.swift */; };
@@ -20,7 +19,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		916F351B2FB1ED08000A6C23 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FA00 /* NeonCatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NeonCatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FA01 /* NeonCatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeonCatchApp.swift; sourceTree = "<group>"; };
 		FA02 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -32,6 +30,8 @@
 		FA08 /* ColorExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorExtensions.swift; sourceTree = "<group>"; };
 		FA09 /* Midnight_Service.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = Midnight_Service.mp3; sourceTree = "<group>"; };
 		FA10 /* Audiowide-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Audiowide-Regular.ttf"; sourceTree = "<group>"; };
+		FA11 /* Info-macOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-macOS.plist"; sourceTree = "<group>"; };
+		FA12 /* NeonCatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NeonCatch.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,10 +63,11 @@
 				FA05 /* GameView.swift */,
 				FA06 /* StartEndScreens.swift */,
 				FA07 /* Info.plist */,
+				FA11 /* Info-macOS.plist */,
+				FA12 /* NeonCatch.entitlements */,
 				FA08 /* ColorExtensions.swift */,
 				FA09 /* Midnight_Service.mp3 */,
 				FA10 /* Audiowide-Regular.ttf */,
-				916F351B2FB1ED08000A6C23 /* Assets.xcassets */,
 			);
 			path = NeonCatch;
 			sourceTree = "<group>";
@@ -107,7 +108,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 2600;
+				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					DD01 = {
 						CreatedOnToolsVersion = 15.0;
@@ -138,7 +139,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA08 /* Midnight_Service.mp3 in Resources */,
-				916F351C2FB1ED08000A6C23 /* Assets.xcassets in Resources */,
 				AA09 /* Audiowide-Regular.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -198,7 +198,6 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 9Q4J6QQDQ4;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -217,11 +216,12 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -262,7 +262,6 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 9Q4J6QQDQ4;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -275,9 +274,10 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_FAST_MATH = YES;
-				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -288,20 +288,23 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = NeonCatch/NeonCatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = HT99YC33BT;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NeonCatch/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Grabeat;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music-games";
+				"INFOPLIST_FILE[sdk=macosx*]" = "NeonCatch/Info-macOS.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.neoncatch.game;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = iphoneos;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -314,20 +317,23 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = NeonCatch/NeonCatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = HT99YC33BT;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NeonCatch/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Grabeat;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music-games";
+				"INFOPLIST_FILE[sdk=macosx*]" = "NeonCatch/Info-macOS.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.neoncatch.game;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = iphoneos;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
