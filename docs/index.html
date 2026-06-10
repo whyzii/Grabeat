@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GraBeat — Support</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Rajdhani:wght@400;500;600&display=swap');
+
+  :root {
+    --cyan:    #00f0ff;
+    --magenta: #ff2bf7;
+    --bg:      #05050a;
+    --panel:   #0d0d18;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    background-image:
+      linear-gradient(rgba(0,240,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,240,255,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    color: #e8e8f0;
+    font-family: 'Rajdhani', sans-serif;
+    line-height: 1.6;
+  }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  h1 {
+    font-family: 'Audiowide', sans-serif;
+    font-size: 2.4rem;
+    letter-spacing: 6px;
+    margin: 0;
+    background: linear-gradient(90deg, var(--cyan), var(--magenta));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 30px rgba(0,240,255,0.25);
+  }
+
+  header p {
+    margin-top: 12px;
+    color: #9aa0b4;
+    letter-spacing: 2px;
+    font-size: 0.95rem;
+  }
+
+  h2 {
+    font-family: 'Audiowide', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 3px;
+    color: var(--cyan);
+    border-bottom: 1px solid rgba(0,240,255,0.25);
+    padding-bottom: 10px;
+    margin: 48px 0 20px;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-bottom: 14px;
+  }
+
+  details summary {
+    font-weight: 600;
+    cursor: pointer;
+    color: #f0f0f8;
+    list-style: none;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before {
+    content: "▸ ";
+    color: var(--magenta);
+  }
+  details[open] summary::before { content: "▾ "; }
+  details p {
+    margin: 12px 0 0;
+    color: #b8bcd0;
+  }
+
+  .contact {
+    text-align: center;
+  }
+  .contact a.button {
+    display: inline-block;
+    margin-top: 14px;
+    padding: 14px 36px;
+    border: 1.5px solid var(--cyan);
+    border-radius: 4px;
+    color: var(--cyan);
+    text-decoration: none;
+    font-family: 'Audiowide', sans-serif;
+    letter-spacing: 3px;
+    font-size: 0.85rem;
+    transition: all 0.15s ease;
+  }
+  .contact a.button:hover {
+    background: rgba(0,240,255,0.12);
+    box-shadow: 0 0 20px rgba(0,240,255,0.35);
+  }
+
+  footer {
+    margin-top: 60px;
+    text-align: center;
+    color: #666c80;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+  }
+
+  a { color: var(--cyan); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>GRABEAT</h1>
+      <p>SUPPORT &amp; HELP CENTER</p>
+    </header>
+
+    <h2>About GraBeat</h2>
+    <div class="card">
+      <p>
+        GraBeat is a hand-tracking rhythm game for iPad, and Mac.
+        Using your device's front camera, GraBeat tracks your hand movements
+        in real time so you can pinch and catch notes to the beat — solo
+        in Versus mode or together with a friend in Co-op mode.
+      </p>
+    </div>
+
+    <h2>Frequently Asked Questions</h2>
+
+    <div class="card">
+      <details>
+        <summary>GraBeat isn't detecting my hands</summary>
+        <p>
+          Make sure you're playing in a well-lit room and that your hands
+          are clearly visible to the front camera, roughly 1–2 feet (30–60 cm)
+          away. Avoid strong backlighting (e.g. sitting directly in front of
+          a window). If tracking still seems off, return to the main menu
+          and run Calibration again.
+        </p>
+      </details>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>The pinch gesture isn't registering</summary>
+        <p>
+          Bring your thumb and index finger fully together, directly over
+          the note you want to catch, and keep your hand inside the camera's
+          field of view. The on-screen reticle will fill in and glow when a
+          pinch is detected. If you're new to GraBeat, the tutorial includes
+          an animated demo showing exactly how the gesture should look.
+        </p>
+      </details>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>Can I turn Photo Booth on or off?</summary>
+        <p>
+          Yes. Each time you start a game, GraBeat shows a Photo Booth
+          screen with a toggle. Turn it on if you'd like GraBeat to capture
+          a few in-game photos with the cyberpunk filter, shown at the end
+          of the round — you can choose whether to save them to your
+          Photos library afterward. Leave it off and GraBeat will only use
+          the camera for hand tracking.
+        </p>
+      </details>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>What does GraBeat do with my camera and photos?</summary>
+        <p>
+          All hand-tracking is processed entirely on your device using
+          Apple's Vision framework — nothing is recorded, stored, or sent
+          anywhere. Photo Booth images are only created if you opt in, and
+          are only saved to your device's Photo Library if you choose to
+          save them. GraBeat does not collect or transmit any personal data.
+        </p>
+      </details>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>I found a bug or have feedback</summary>
+        <p>
+          We'd love to hear from you — tap the contact button below and
+          let us know your device model, iOS/macOS version, and what
+          happened. Screenshots or screen recordings are always helpful.
+        </p>
+      </details>
+    </div>
+
+    <h2>Contact Us</h2>
+    <div class="card contact">
+      <p>Still need help? Reach out and we'll get back to you as soon as we can.</p>
+      <a class="button" href="mailto:abbas.yousefzadeh98@gmail.com?subject=GraBeat%20Support">EMAIL SUPPORT</a>
+    </div>
+
+    <footer>
+      GraBeat &middot; com.grabeat.game
+    </footer>
+  </div>
+</body>
+</html>
